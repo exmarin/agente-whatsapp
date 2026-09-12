@@ -1,0 +1,78 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+A **multi-tenant (per-workspace) conversational WhatsApp inbox platform with an AI agent operable by a human** — not "just a bot": inbox (WhatsApp Web-style) + basic CRM + agent runtime with intelligent message buffering + human handoff + custom prompting + activatable tools + setter/qualification mode + scheduling + strict Meta 24h-window compliance. Fixed stack decisions: **YCloud** (WhatsApp provider, only), **OpenRouter** (LLM gateway), **HighLevel** (CRM integration, v1). Built on Next.js (App Router) + Tailwind CSS + Supabase (Postgres + RLS + Realtime + pgvector), deployed on Vercel.
+
+**Planning docs (read before building anything non-trivial):** `docs/planeacion/`
+- `BLUEPRINT-agente-whatsapp.md` — the authoritative technical plan: full DB schema (§3), agent runtime architecture in 8 subsystems (§4), YCloud/OpenRouter/HighLevel API contracts with confirmed real-world gotchas (§5), and the phased roadmap with concrete tasks `F<phase>-T<n>` (§7).
+- `USER-STORIES-agente-whatsapp.md` — 48 user stories in 8 Epics mapped to the Blueprint's phases, each with acceptance criteria.
+- `SECURITY-AUDIT-agente-whatsapp.md` — found 7 critical findings (prompt injection via sensitive tools, incomplete RLS, encryption key custody, 24h-window bypass, unauthenticated internal buffer endpoint, no LLM cost enforcement, HighLevel OAuth refresh race). All 7 are already folded into the Blueprint's roadmap as blocking tasks (§7/§8) — don't re-open them as open questions, implement the tasks that resolve them.
+
+The Blueprint references two external repos (`ATS`, `Movinsa`) as reuse/gotcha sources — **neither exists on this machine**; they only existed on the plan's original author's machine. Treat every "ATS reuse-directo" / "ATS adaptar" / "Referencia Movinsa" note in Blueprint §6 as a **spec to reimplement**, not literal source to copy.
+
+Current progress: Fase 0 (schema/RLS/tools contract) and Fase 1 (login, workspace creation, integrations settings, inbox UI, YCloud webhook → AI "camino feliz" reply) are built. Everything past that — buffering, the decision engine, tool-calling loop, 24h-window enforcement, HighLevel — is explicitly not implemented yet; see the "Known gaps" note at the end of each subsystem section below before assuming a guardrail exists.
+
+## Commands
+
+```
+npm run dev      # start dev server (Turbopack)
+npm run build    # production build
+npm run start    # run the production build
+npm run lint     # ESLint (flat config)
+npm run test     # vitest run (unit tests, e.g. src/features/tools/core/registry.test.ts)
+```
+
+To run a single test file: `npx vitest run src/features/tools/core/registry.test.ts`. To run in watch mode: `npx vitest`.
+
+## Critical: this Next.js version has breaking changes vs. your training data
+
+This project is on **Next.js 16**. Conventions differ from what you likely remember — most importantly:
+
+- **`middleware.ts` is gone — it's `proxy.ts` now.** Same purpose (runs before a request completes), same underlying APIs (`NextRequest`/`NextResponse`), new file name and export name (`proxy.ts`, exporting a `proxy` function). See `src/proxy.ts` in this repo for the working example.
+- Route props like `params`/`searchParams` are typed via generated helpers (e.g. `LayoutProps<"/">`, see `src/app/layout.tsx`), not hand-written inline types.
+- Before writing any Next.js-specific code (routing, caching, data fetching, config), check `node_modules/next/dist/docs/` for the current guide — don't rely on prior knowledge of Next.js APIs. This is enforced by `AGENTS.md`, which `next dev` regenerates; don't strip it from diffs.
+
+## Architecture
+
+**Routing / rendering**: App Router under `src/app/`. Path alias `@/*` → `src/*` (see `tsconfig.json`). `src/proxy.ts` does an optimistic auth check (redirects `/inbox/*` → `/login` when unauthenticated, and `/login` → `/inbox` when already authenticated); the real per-request check is `verifySession()` from `src/lib/supabase/dal.ts`, which every protected Server Component/Action calls itself (the proxy check is not sufficient on its own — see Auth below).
+
+**Styling**: Tailwind CSS v4, CSS-first config — there is no `tailwind.config.js`. Theme tokens (fonts, colors) are declared directly in `src/app/globals.css` via `@import "tailwindcss"` and an `@theme inline` block. Add design tokens there, not in a JS config file. shadcn/ui is installed (`components.json`, style `base-nova`, base color `neutral`) — generated components land in `src/components/ui/`; add new ones via the shadcn CLI rather than hand-rolling primitives.
+
+**Auth / backend — Supabase** (`src/lib/supabase/`):
+- `client.ts` — browser client (`createBrowserClient`), for Client Components (e.g. the Realtime subscription in `message-thread.tsx`).
+- `server.ts` — server client (`createServerClient`) for Server Components/Actions/Route Handlers, backed by `next/headers` cookies. Create a fresh instance per request (this pattern is intentional — the client is not meant to be a shared singleton across requests). Respects RLS as the logged-in user.
+- `admin.ts` — `createAdminClient()`, a `service_role` client that **bypasses RLS**. Reserved for trusted server-only paths that must act across tenants before there's an authenticated user context: the YCloud webhook handler, integration credential reads, workspace/membership bootstrap on signup. Never import into anything reachable from a Client Component.
+- `dal.ts` — `verifySession()`, wrapped in React's `cache()` so it dedupes within one render pass. Call this at the top of every protected Server Component/Action; it's the real auth gate (`proxy.ts` only gives you the redirect UX, not the guarantee).
+- `middleware.ts` — `updateSession()`, called from `src/proxy.ts` on every request to refresh the Supabase auth token and keep cookies in sync between the request and response. This is required for SSR auth to work; don't remove the `supabase.auth.getUser()` call inside it or sessions will silently stop refreshing.
+- Env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (public), `SUPABASE_SERVICE_ROLE_KEY` (server-only, bypasses RLS — never import it into client-reachable code). See `.env.local.example`; actual values live in the (gitignored) `.env.local`.
+- Connected Supabase project: `agente-whatsapp` (ref `aasgdfvvrmlzlohkcmah`, region `sa-east-1`), org `agente_whatsapp`.
+- `src/lib/supabase/database.types.ts` — generated types (`mcp__supabase__generate_typescript_types`), wired into both clients via `createBrowserClient<Database>` / `createServerClient<Database>`. Regenerate after every schema migration — don't hand-edit.
+
+**Database schema** (`supabase/migrations/`, source of truth: `docs/planeacion/BLUEPRINT-agente-whatsapp.md` §3): All 21 tables from the Blueprint's full data model exist, **every tenant-scoped table has RLS from its very first migration** (not added later — see `SECURITY-AUDIT-agente-whatsapp.md` SEC-02). Multi-tenancy is enforced via `auth_workspace_ids()` / `auth_has_role()` helper functions (SQL, `SECURITY DEFINER`, `search_path` pinned). RLS write policies are split per-action (`insert`/`update`/`delete`), never `for all`, to avoid stacking a redundant permissive policy on top of the dedicated `select` policy (Supabase perf advisor: `multiple_permissive_policies`). Follow this pattern for any new tenant table. After any schema change: re-run `mcp__supabase__get_advisors` (both `security` and `performance`) and fix what it flags before moving on.
+
+- `integrations.credentials` / `integrations.oauth_tokens` / `tool_configs.credentials` are opaque ciphertext JSONB envelopes — encrypted/decrypted only in `src/lib/crypto.ts` (AES-256-GCM via `scryptSync`-derived key, key from `ENCRYPTION_KEY` env var; envelope carries `key_id` for future rotation). **Postgres never sees plaintext or the key** (SEC-03) — don't add `pgcrypto`-based encryption in SQL as a shortcut. `src/features/integrations/services/credentials.ts` is the only place that decrypts per-provider credentials (`getYCloudIntegration` / `getOpenRouterIntegration`), always via the admin client.
+- `tools` catalog is seeded (11 Core v1 tools from Blueprint §4.5.4) with a `sensitivity` column (`read`/`write`/`sensitive`) — `sensitive` tools must default to requiring human confirmation before `run()` (SEC-01), enforced in the agent runtime, not yet built.
+
+**Messaging & AI reply pipeline** (`src/features/messaging/`, `src/features/ai/`, `src/app/api/webhooks/ycloud/[workspace]/route.ts`) — the inbound path, one file per concern, always in this order:
+1. **Route** resolves the workspace by slug from the URL path (`[workspace]`) *before* verifying anything, so the per-workspace webhook secret can be looked up.
+2. **`webhook-security.ts`** (`verifyYCloudSignature`) — HMAC-SHA256 over `timestamp + "." + rawBody`, using the *raw* request body read via `request.text()` before any `JSON.parse`; re-serializing parsed JSON will not reproduce the signature. Also enforces a 5-minute replay tolerance.
+3. **`normalizer.ts`** (`normalizeInbound`) — validates the YCloud payload shape with Zod and converts it to the provider-agnostic `UnifiedInboundEvent` (`src/features/messaging/types.ts`). Also owns `normalizePhone`, which repairs YCloud's confirmed real-world gotcha of phone numbers sometimes arriving without a leading `+`.
+4. **`inbound-pipeline.ts`** (`handleInboundMessage`) — upserts contact/conversation (conflict keys `workspace_id,phone` / `workspace_id,contact_id,channel`), inserts the inbound message (duplicate `wamid` → unique-violation `23505` is treated as already-processed and swallowed, not an error), and — only if the conversation has `ai_enabled` and the message is text — calls `ai/services/prompt.ts` (`resolveSystemPrompt`, currently one free-text prompt per workspace from `business_info.free_text`, falling back to a generic skeleton) then `ai/services/openrouter.ts` (`generateReply`, single non-streaming call, hardcoded model `anthropic/claude-sonnet-4.5`, no tool-calling loop yet) then `ycloud-client.ts` (`sendText`) to reply.
+5. The route handler always ACKs 2xx even when step 4 throws — YCloud retry-storms on non-2xx — logging failures to the `events` table instead (Blueprint's "regla de oro").
+
+Known gaps (intentional, not bugs): no message buffering/debounce (Fase 2), no decision engine for when *not* to reply (Fase 3), no tool-calling loop (Fase 6), no 24h-window enforcement blocking outbound free text (Fase 4, `US-E4-2`) — `sendManualMessage` (`src/features/inbox/actions/send-message.ts`) can currently send outside the window with no guard. `webhook-security.ts` also currently returns raw HMAC values in its failure `debug` payload for local debugging; the comment marks this TEMP, remove once the webhook is confirmed stable in production.
+
+**Inbox UI** (`src/app/inbox/`, `src/features/inbox/`): Server Components fetch the initial conversation/message list (`verifySession()` → RLS-scoped query), then hand off to Client Components for live updates. `MessageThread` subscribes to Supabase Realtime (`postgres_changes` on `messages`, filtered by `conversation_id`) and must be rendered with `key={conversationId}` so switching conversations remounts it instead of carrying over stale subscription state. `AiToggle` flips `conversations.ai_enabled`; `Composer` + `sendManualMessage` server action send operator-authored replies through the same `ycloud-client.ts` used by the AI path, tagging the message with `sender_user_id` (its absence in a rendered message means "sent by the AI").
+
+**Auth / workspaces flow**: email+password login only (`src/app/login/actions.ts`, `supabase.auth.signInWithPassword`) — no signup UI yet, users are created directly in Supabase Auth. After login, `src/features/workspaces/actions.ts` lets a user create a workspace (auto-slugified with numeric-suffix collision handling), which bootstraps their `users` row and an `admin` membership in one action. `saveIntegrations` / `savePrompt` re-check membership role (`admin` required for integrations) before writing — don't rely on RLS alone for these since they use the admin client to write encrypted credentials.
+
+**Tools contract** (`src/features/tools/`, Blueprint §4.5): `core/tool.ts` defines the `Tool<TArgs>` interface (`name`, `description`, `sensitivity`, `schema` (Zod), `enabledFor(workspace)`, `run(args, ctx)`) — `ToolContext` carries `workspaceId`/`contactPhone`/`conversationId` resolved server-side (never trust these as LLM-supplied args, per SEC-01); `core/registry.ts` looks tools up by name / lists enabled-for-workspace; `adapters/ping.ts` is the F0 stub proving the contract end-to-end (tested in `registry.test.ts`). Real adapters (YCloud send, HighLevel, KB search, etc.) land in later phases per the roadmap — add each as a new file under `adapters/` implementing `Tool`, registered in `registry.ts`.
+
+**MCP**: `.mcp.json` configures two servers:
+- **Supabase** (`@supabase/mcp-server-supabase`), pinned to the `agente-whatsapp` project ref so Claude Code can inspect/manage it directly (list tables, run SQL, check advisors, etc.). It reads `SUPABASE_ACCESS_TOKEN` from the environment (set as a persistent Windows env var, not committed).
+- **Context7** (`@upstash/context7-mcp`), for pulling up-to-date library/framework docs into context. Reads `CONTEXT7_API_KEY` from the environment (set as a persistent Windows env var, not committed) for higher rate limits.
+
+**Deploy**: Vercel. `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` need to be set as environment variables in the Vercel project settings (mirroring `.env.local`).
