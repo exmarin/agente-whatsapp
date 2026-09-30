@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getYCloudIntegration } from "@/features/integrations/services/credentials";
-import { sendText } from "@/features/messaging/services/ycloud-client";
+import { getMetaIntegration } from "@/features/integrations/services/credentials";
+import { sendText } from "@/features/messaging/services/meta-client";
 import { verifySession } from "@/lib/supabase/dal";
 
 export async function sendManualMessage(conversationId: string, body: string) {
@@ -18,15 +18,20 @@ export async function sendManualMessage(conversationId: string, body: string) {
     .single();
   if (convError || !conversation) return { error: "Conversación no encontrada." };
 
-  const ycloud = await getYCloudIntegration(conversation.workspace_id);
-  if (!ycloud) return { error: "YCloud no está conectado en este workspace todavía." };
+  const meta = await getMetaIntegration(conversation.workspace_id);
+  if (!meta) return { error: "WhatsApp (Meta) no está conectado en este workspace todavía." };
 
   const contactPhone = (conversation.contacts as unknown as { phone: string } | null)?.phone;
   if (!contactPhone) return { error: "No se encontró el teléfono del contacto." };
 
   let sent;
   try {
-    sent = await sendText({ from: ycloud.from, to: contactPhone, body: trimmed, apiKey: ycloud.apiKey });
+    sent = await sendText({
+      phoneNumberId: meta.phoneNumberId,
+      to: contactPhone,
+      body: trimmed,
+      accessToken: meta.accessToken,
+    });
   } catch (error) {
     return { error: error instanceof Error ? error.message : "No pudimos enviar el mensaje." };
   }

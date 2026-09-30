@@ -21,7 +21,9 @@ export interface UnifiedInboundEvent {
   text?: string;
   media?: {
     kind: "audio" | "image" | "video" | "document" | "sticker";
-    link: string;
+    /** Meta media ID — resolve via `GET /{id}` on the Graph API for a
+     *  short-lived download URL; there is no direct link in the webhook. */
+    id: string;
     mimeType?: string;
     caption?: string;
     sha256?: string;

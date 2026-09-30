@@ -91,28 +91,28 @@ export async function saveIntegrations(
     return { error: "Solo un admin del workspace puede conectar integraciones." };
   }
 
-  const ycloudApiKey = String(formData.get("ycloudApiKey") ?? "").trim();
-  const ycloudWebhookSecret = String(formData.get("ycloudWebhookSecret") ?? "").trim();
-  const ycloudFromNumber = String(formData.get("ycloudFromNumber") ?? "").trim();
+  const metaAccessToken = String(formData.get("metaAccessToken") ?? "").trim();
+  const metaPhoneNumberId = String(formData.get("metaPhoneNumberId") ?? "").trim();
+  const metaWabaId = String(formData.get("metaWabaId") ?? "").trim();
   const openrouterApiKey = String(formData.get("openrouterApiKey") ?? "").trim();
 
   const admin = createAdminClient();
 
-  if (ycloudApiKey || ycloudWebhookSecret || ycloudFromNumber) {
-    if (!ycloudApiKey || !ycloudWebhookSecret || !ycloudFromNumber) {
-      return { error: "Para conectar YCloud completa API key, webhook secret y número." };
+  if (metaAccessToken || metaPhoneNumberId) {
+    if (!metaAccessToken || !metaPhoneNumberId) {
+      return { error: "Para conectar WhatsApp completa el access token y el phone number ID." };
     }
     const { error } = await admin.from("integrations").upsert(
       {
         workspace_id: workspace.id,
-        provider: "ycloud",
+        provider: "meta",
         enabled: true,
-        credentials: encryptJson({ apiKey: ycloudApiKey, webhookSecret: ycloudWebhookSecret }) as unknown as Json,
-        config: { from: ycloudFromNumber, defaultCountry: "1" },
+        credentials: encryptJson({ accessToken: metaAccessToken }) as unknown as Json,
+        config: { phoneNumberId: metaPhoneNumberId, wabaId: metaWabaId || null },
       },
       { onConflict: "workspace_id,provider" },
     );
-    if (error) return { error: `No se pudo guardar YCloud: ${error.message}` };
+    if (error) return { error: `No se pudo guardar WhatsApp: ${error.message}` };
   }
 
   if (openrouterApiKey) {

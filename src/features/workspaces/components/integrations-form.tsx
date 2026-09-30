@@ -8,12 +8,16 @@ import { saveIntegrations, type SaveIntegrationsState } from "../actions";
 
 export function IntegrationsForm({
   slug,
-  ycloudEnabled,
+  metaEnabled,
   openrouterEnabled,
+  webhookUrl,
+  verifyToken,
 }: {
   slug: string;
-  ycloudEnabled: boolean;
+  metaEnabled: boolean;
   openrouterEnabled: boolean;
+  webhookUrl: string;
+  verifyToken: string;
 }) {
   const [state, action, pending] = useActionState<SaveIntegrationsState, FormData>(saveIntegrations, undefined);
 
@@ -23,23 +27,41 @@ export function IntegrationsForm({
 
       <fieldset className="space-y-3">
         <legend className="text-sm font-medium">
-          YCloud (WhatsApp) {ycloudEnabled && <span className="text-green-600">— conectado</span>}
+          WhatsApp (Meta Cloud API) {metaEnabled && <span className="text-green-600">— conectado</span>}
         </legend>
         <div className="space-y-1.5">
-          <Label htmlFor="ycloudApiKey">API key</Label>
-          <Input id="ycloudApiKey" name="ycloudApiKey" type="password" placeholder={ycloudEnabled ? "•••••••• (déjalo vacío para no cambiarla)" : ""} />
+          <Label htmlFor="metaAccessToken">Access token</Label>
+          <Input
+            id="metaAccessToken"
+            name="metaAccessToken"
+            type="password"
+            placeholder={metaEnabled ? "•••••••• (déjalo vacío para no cambiarlo)" : ""}
+          />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="ycloudWebhookSecret">Webhook secret</Label>
-          <Input id="ycloudWebhookSecret" name="ycloudWebhookSecret" type="password" placeholder={ycloudEnabled ? "•••••••• (déjalo vacío para no cambiarla)" : ""} />
+          <Label htmlFor="metaPhoneNumberId">Phone number ID</Label>
+          <Input
+            id="metaPhoneNumberId"
+            name="metaPhoneNumberId"
+            placeholder={metaEnabled ? "déjalo vacío para no cambiarlo" : "ej. 1335332349663921"}
+          />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="ycloudFromNumber">Número de WhatsApp (E.164, ej. +50760000000)</Label>
-          <Input id="ycloudFromNumber" name="ycloudFromNumber" placeholder={ycloudEnabled ? "déjalo vacío para no cambiarlo" : "+50760000000"} />
+          <Label htmlFor="metaWabaId">WABA ID (opcional)</Label>
+          <Input id="metaWabaId" name="metaWabaId" placeholder="ej. 924309933733319" />
         </div>
-        <p className="text-xs text-zinc-500">
-          URL del webhook para configurar en YCloud: <code>https://TU-DOMINIO/api/webhooks/ycloud/{slug}</code>
-        </p>
+        <div className="space-y-1 rounded-md bg-zinc-50 p-3 text-xs text-zinc-600">
+          <p>
+            Esto se configura <strong>una sola vez</strong> en tu app de Meta (Webhooks → suscribir el WhatsApp
+            Business Account), no por workspace:
+          </p>
+          <p>
+            Callback URL: <code>{webhookUrl}</code>
+          </p>
+          <p>
+            Verify token: <code>{verifyToken}</code>
+          </p>
+        </div>
       </fieldset>
 
       <fieldset className="space-y-3">

@@ -2,30 +2,48 @@ import "server-only";
 import { decryptJson, type EncryptedEnvelope } from "@/lib/crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-interface YCloudCredentials {
-  apiKey: string;
-  webhookSecret: string;
+interface MetaCredentials {
+  accessToken: string;
 }
 
-interface YCloudConfig {
-  from: string;
-  defaultCountry: string;
+interface MetaConfig {
+  phoneNumberId: string;
+  wabaId?: string | null;
 }
 
-export async function getYCloudIntegration(workspaceId: string) {
+export async function getMetaIntegration(workspaceId: string) {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("integrations")
     .select("credentials, config, enabled")
     .eq("workspace_id", workspaceId)
-    .eq("provider", "ycloud")
+    .eq("provider", "meta")
     .maybeSingle();
   if (error) throw error;
   if (!data || !data.enabled) return null;
 
-  const credentials = decryptJson<YCloudCredentials>(data.credentials as unknown as EncryptedEnvelope);
-  const config = data.config as unknown as YCloudConfig;
-  return { ...credentials, from: config.from, defaultCountry: config.defaultCountry || "1" };
+  const credentials = decryptJson<MetaCredentials>(data.credentials as unknown as EncryptedEnvelope);
+  const config = data.config as unknown as MetaConfig;
+  return { ...credentials, phoneNumberId: config.phoneNumberId, wabaId: config.wabaId ?? null };
+}
+
+/**
+ * Meta's webhook is one URL for the whole app (subscribed once, not per
+ * workspace) — every inbound event carries `phone_number_id`, and this is
+ * how it resolves to a tenant. Requires each workspace's `meta` integration
+ * config to store that ID (see `saveIntegrations`).
+ */
+export async function findWorkspaceIdByPhoneNumberId(phoneNumberId: string): Promise<string | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("integrations")
+    .select("workspace_id")
+    .eq("provider", "meta")
+    .eq("enabled", true)
+    .eq("config->>phoneNumberId", phoneNumberId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.workspace_id ?? null;
 }
 
 interface OpenRouterCredentials {

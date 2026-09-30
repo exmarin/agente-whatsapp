@@ -23,7 +23,7 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
     .eq("workspace_id", workspace.id)
     .maybeSingle();
 
-  const ycloudEnabled = integrations?.some((i) => i.provider === "ycloud" && i.enabled) ?? false;
+  const metaEnabled = integrations?.some((i) => i.provider === "meta" && i.enabled) ?? false;
   const openrouterEnabled = integrations?.some((i) => i.provider === "openrouter" && i.enabled) ?? false;
 
   return (
@@ -37,7 +37,13 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
           <CardTitle>{workspace.name}</CardTitle>
         </CardHeader>
         <CardContent>
-          <IntegrationsForm slug={workspace.slug} ycloudEnabled={ycloudEnabled} openrouterEnabled={openrouterEnabled} />
+          <IntegrationsForm
+            slug={workspace.slug}
+            metaEnabled={metaEnabled}
+            openrouterEnabled={openrouterEnabled}
+            webhookUrl="https://TU-DOMINIO/api/webhooks/meta"
+            verifyToken={process.env.META_VERIFY_TOKEN ?? "(META_VERIFY_TOKEN no configurado en .env.local)"}
+          />
         </CardContent>
       </Card>
 

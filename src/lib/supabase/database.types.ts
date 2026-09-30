@@ -1098,7 +1098,7 @@ export type Database = {
         | "waiting_reply"
         | "paused"
         | "closed"
-      integration_provider: "highlevel" | "openrouter" | "ycloud" | "caldotcom"
+      integration_provider: "highlevel" | "openrouter" | "ycloud" | "caldotcom" | "meta"
       message_direction: "in" | "out"
       message_status: "queued" | "sent" | "delivered" | "read" | "failed"
       message_type:
@@ -1259,7 +1259,7 @@ export const Constants = {
         "paused",
         "closed",
       ],
-      integration_provider: ["highlevel", "openrouter", "ycloud", "caldotcom"],
+      integration_provider: ["highlevel", "openrouter", "ycloud", "caldotcom", "meta"],
       message_direction: ["in", "out"],
       message_status: ["queued", "sent", "delivered", "read", "failed"],
       message_type: [

@@ -1,11 +1,11 @@
 import "server-only";
 import { generateReply } from "@/features/ai/services/openrouter";
 import { resolveSystemPrompt } from "@/features/ai/services/prompt";
-import { getOpenRouterIntegration, getYCloudIntegration } from "@/features/integrations/services/credentials";
+import { getMetaIntegration, getOpenRouterIntegration } from "@/features/integrations/services/credentials";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import type { UnifiedInboundEvent } from "../types";
-import { sendText } from "./ycloud-client";
+import { sendText } from "./meta-client";
 
 type MessageType = Database["public"]["Enums"]["message_type"];
 
@@ -75,17 +75,17 @@ export async function handleInboundMessage(event: UnifiedInboundEvent, workspace
 
   if (!conversation.ai_enabled || event.type !== "text" || !event.text) return;
 
-  const [ycloud, openrouter] = await Promise.all([
-    getYCloudIntegration(workspaceId),
+  const [meta, openrouter] = await Promise.all([
+    getMetaIntegration(workspaceId),
     getOpenRouterIntegration(workspaceId),
   ]);
-  if (!ycloud || !openrouter) {
+  if (!meta || !openrouter) {
     await supabase.from("events").insert({
       workspace_id: workspaceId,
       conversation_id: conversation.id,
       type: "decision",
       level: "warn",
-      payload: { reason: "missing_integration", ycloud: !!ycloud, openrouter: !!openrouter },
+      payload: { reason: "missing_integration", meta: !!meta, openrouter: !!openrouter },
     });
     return;
   }
@@ -98,10 +98,10 @@ export async function handleInboundMessage(event: UnifiedInboundEvent, workspace
   });
 
   const sent = await sendText({
-    from: ycloud.from,
+    phoneNumberId: meta.phoneNumberId,
     to: event.from,
     body: reply.text,
-    apiKey: ycloud.apiKey,
+    accessToken: meta.accessToken,
   });
 
   await supabase.from("messages").insert({

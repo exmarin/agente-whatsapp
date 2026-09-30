@@ -62,7 +62,7 @@ export function MessageThread({
   }
 
   return (
-    <ScrollArea className="flex-1 px-4 py-3">
+    <ScrollArea className="min-h-0 flex-1 px-4 py-3">
       <div className="flex flex-col gap-2">
         {messages.map((message) => (
           <div
