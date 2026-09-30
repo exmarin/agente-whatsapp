@@ -9,7 +9,6 @@ const CONNECT_SRC = [
   "'self'",
   "https://*.supabase.co",
   "wss://*.supabase.co",
-  "https://api.ycloud.com",
   "https://openrouter.ai",
   "https://services.leadconnectorhq.com",
 ].join(" ");
@@ -40,6 +39,11 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  // Dev-only: Next.js checks the request Origin against Host to block CSRF
+  // on Server Actions and HMR. Local dev is tunneled through ngrok, so its
+  // origin differs from the server's own host — without this, Server
+  // Action calls (e.g. the inbox AI toggle) are silently rejected.
+  allowedDevOrigins: ["override-strategic-oat.ngrok-free.dev"],
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },

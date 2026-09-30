@@ -43,12 +43,12 @@ export function IntegrationsForm({
           <Input
             id="metaPhoneNumberId"
             name="metaPhoneNumberId"
-            placeholder={metaEnabled ? "déjalo vacío para no cambiarlo" : "ej. 1335332349663921"}
+            placeholder={metaEnabled ? "déjalo vacío para no cambiarlo" : "ej. 100000000000000"}
           />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="metaWabaId">WABA ID (opcional)</Label>
-          <Input id="metaWabaId" name="metaWabaId" placeholder="ej. 924309933733319" />
+          <Input id="metaWabaId" name="metaWabaId" placeholder="ej. 200000000000000" />
         </div>
         <div className="space-y-1 rounded-md bg-zinc-50 p-3 text-xs text-zinc-600">
           <p>
