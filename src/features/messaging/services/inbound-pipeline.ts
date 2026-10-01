@@ -1,4 +1,5 @@
 import "server-only";
+import { checkDailyBudget } from "@/features/ai/services/budget";
 import { generateReply } from "@/features/ai/services/openrouter";
 import { resolveSystemPrompt } from "@/features/ai/services/prompt";
 import { getMetaIntegration, getOpenRouterIntegration } from "@/features/integrations/services/credentials";
@@ -86,6 +87,19 @@ export async function handleInboundMessage(event: UnifiedInboundEvent, workspace
       type: "decision",
       level: "warn",
       payload: { reason: "missing_integration", meta: !!meta, openrouter: !!openrouter },
+    });
+    return;
+  }
+
+  const budget = await checkDailyBudget(workspaceId);
+  if (budget.exceeded) {
+    await supabase.from("conversations").update({ state: "handoff_pending" }).eq("id", conversation.id);
+    await supabase.from("events").insert({
+      workspace_id: workspaceId,
+      conversation_id: conversation.id,
+      type: "decision",
+      level: "warn",
+      payload: { reason: "budget_exceeded", spentUsd: budget.spentUsd, budgetUsd: budget.budgetUsd },
     });
     return;
   }
