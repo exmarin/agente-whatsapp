@@ -4,6 +4,7 @@ import { generateReply } from "@/features/ai/services/openrouter";
 import { resolveSystemPrompt } from "@/features/ai/services/prompt";
 import { getMetaIntegration, getOpenRouterIntegration } from "@/features/integrations/services/credentials";
 import { notifyTeam } from "@/features/notifications/services/notify-team";
+import { hasSchedulingIntent } from "@/features/notifications/services/scheduling-intent";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import type { UnifiedInboundEvent } from "../types";
@@ -91,6 +92,32 @@ export async function handleInboundMessage(event: UnifiedInboundEvent, workspace
       "Nuevo cliente escribió por WhatsApp",
       `${who} te escribió por primera vez:\n\n"${event.text ?? "[mensaje no es texto]"}"`,
     );
+  }
+
+  if (event.type === "text" && event.text && hasSchedulingIntent(event.text)) {
+    const { data: alreadyNotified } = await supabase
+      .from("events")
+      .select("id")
+      .eq("conversation_id", conversation.id)
+      .eq("type", "decision")
+      .contains("payload", { reason: "scheduling_intent" })
+      .limit(1)
+      .maybeSingle();
+    if (!alreadyNotified) {
+      const who = event.contactName ? `${event.contactName} (${event.from})` : event.from;
+      await notifyTeam(
+        workspaceId,
+        "Cliente quiere agendar",
+        `${who} parece querer coordinar una reunión:\n\n"${event.text}"`,
+      );
+      await supabase.from("events").insert({
+        workspace_id: workspaceId,
+        conversation_id: conversation.id,
+        type: "decision",
+        level: "info",
+        payload: { reason: "scheduling_intent" },
+      });
+    }
   }
 
   if (!conversation.ai_enabled || event.type !== "text" || !event.text) return;
