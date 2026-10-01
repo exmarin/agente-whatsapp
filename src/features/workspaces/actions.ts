@@ -152,3 +152,40 @@ export async function savePrompt(_prevState: SavePromptState, formData: FormData
 
   return { success: true };
 }
+
+export type SaveNotificationEmailsState = { error?: string; success?: boolean } | undefined;
+
+export async function saveNotificationEmails(
+  _prevState: SaveNotificationEmailsState,
+  formData: FormData,
+): Promise<SaveNotificationEmailsState> {
+  const { supabase } = await verifySession();
+
+  const slug = formData.get("slug");
+  const raw = formData.get("notificationEmails");
+  if (typeof slug !== "string" || !slug) return { error: "Workspace inválido." };
+  if (typeof raw !== "string") return { error: "Lista de correos inválida." };
+
+  const emails = raw
+    .split(/[,\n]/)
+    .map((e) => e.trim())
+    .filter(Boolean);
+  const invalid = emails.find((e) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+  if (invalid) return { error: `"${invalid}" no parece un email válido.` };
+
+  const { data: workspace } = await supabase
+    .from("workspaces")
+    .select("id, settings")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!workspace) return { error: "No tienes acceso a ese workspace." };
+
+  const settings = (workspace.settings as Record<string, unknown>) ?? {};
+  const { error } = await supabase
+    .from("workspaces")
+    .update({ settings: { ...settings, notification_emails: emails } })
+    .eq("id", workspace.id);
+  if (error) return { error: `No se pudo guardar (¿eres admin de este workspace?): ${error.message}` };
+
+  return { success: true };
+}

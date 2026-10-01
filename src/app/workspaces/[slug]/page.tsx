@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { IntegrationsForm } from "@/features/workspaces/components/integrations-form";
+import { NotificationsForm } from "@/features/workspaces/components/notifications-form";
 import { PromptForm } from "@/features/workspaces/components/prompt-form";
 import { verifySession } from "@/lib/supabase/dal";
 
@@ -9,8 +10,15 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
   const { slug } = await params;
   const { supabase } = await verifySession();
 
-  const { data: workspace } = await supabase.from("workspaces").select("id, name, slug").eq("slug", slug).maybeSingle();
+  const { data: workspace } = await supabase
+    .from("workspaces")
+    .select("id, name, slug, settings")
+    .eq("slug", slug)
+    .maybeSingle();
   if (!workspace) notFound();
+
+  const notificationEmails =
+    (workspace.settings as { notification_emails?: string[] } | null)?.notification_emails ?? [];
 
   const { data: integrations } = await supabase
     .from("integrations")
@@ -54,6 +62,16 @@ export default async function WorkspaceSettingsPage({ params }: { params: Promis
         </CardHeader>
         <CardContent>
           <PromptForm slug={workspace.slug} initialText={businessInfo?.free_text ?? null} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Notificaciones al equipo</CardTitle>
+          <CardDescription>Correos que se avisan cuando llega un cliente nuevo o la IA se pausa sola.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <NotificationsForm slug={workspace.slug} initialEmails={notificationEmails} />
         </CardContent>
       </Card>
     </div>

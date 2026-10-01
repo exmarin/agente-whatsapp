@@ -3,6 +3,7 @@ import { checkDailyBudget } from "@/features/ai/services/budget";
 import { generateReply } from "@/features/ai/services/openrouter";
 import { resolveSystemPrompt } from "@/features/ai/services/prompt";
 import { getMetaIntegration, getOpenRouterIntegration } from "@/features/integrations/services/credentials";
+import { notifyTeam } from "@/features/notifications/services/notify-team";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import type { UnifiedInboundEvent } from "../types";
@@ -44,6 +45,15 @@ export async function handleInboundMessage(event: UnifiedInboundEvent, workspace
   const nowIso = new Date(event.ts).toISOString();
   const windowExpiresIso = new Date(event.ts + 24 * 60 * 60 * 1000).toISOString();
 
+  const { data: existingConversation } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("contact_id", contact.id)
+    .eq("channel", "whatsapp")
+    .maybeSingle();
+  const isNewConversation = !existingConversation;
+
   const { data: conversation, error: convError } = await supabase
     .from("conversations")
     .upsert(
@@ -74,6 +84,15 @@ export async function handleInboundMessage(event: UnifiedInboundEvent, workspace
     throw inboundError;
   }
 
+  if (isNewConversation) {
+    const who = event.contactName ? `${event.contactName} (${event.from})` : event.from;
+    await notifyTeam(
+      workspaceId,
+      "Nuevo cliente escribió por WhatsApp",
+      `${who} te escribió por primera vez:\n\n"${event.text ?? "[mensaje no es texto]"}"`,
+    );
+  }
+
   if (!conversation.ai_enabled || event.type !== "text" || !event.text) return;
 
   const [meta, openrouter] = await Promise.all([
@@ -101,6 +120,11 @@ export async function handleInboundMessage(event: UnifiedInboundEvent, workspace
       level: "warn",
       payload: { reason: "budget_exceeded", spentUsd: budget.spentUsd, budgetUsd: budget.budgetUsd },
     });
+    await notifyTeam(
+      workspaceId,
+      "La IA se pausó: se superó el límite de gasto diario",
+      `Se alcanzó el límite de $${budget.budgetUsd} USD/día en respuestas de IA (gastado hoy: $${budget.spentUsd.toFixed(4)}). La IA dejó de responder automáticamente — revisá las conversaciones marcadas "Handoff" en el inbox.`,
+    );
     return;
   }
 
