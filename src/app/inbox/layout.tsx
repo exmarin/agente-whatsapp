@@ -9,13 +9,15 @@ export default async function InboxLayout({ children }: { children: React.ReactN
 
   const { data: conversations } = await supabase
     .from("conversations")
-    .select("id, state, ai_enabled, last_message_at, unread_count, contacts(name, phone)")
+    .select("id, state, ai_enabled, last_message_at, unread_count, contacts(name, phone), messages(body)")
     .order("last_message_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { referencedTable: "messages", ascending: false })
+    .limit(1, { referencedTable: "messages" })
     .returns<ConversationListItem[]>();
 
   return (
-    <div className="flex h-screen flex-col bg-zinc-50 dark:bg-black">
-      <header className="flex items-center justify-between border-b bg-white px-4 py-2 dark:bg-zinc-950">
+    <div className="flex h-screen flex-col bg-background">
+      <header className="flex items-center justify-between border-b bg-card px-4 py-2">
         <h1 className="text-sm font-semibold">Agente WhatsApp</h1>
         <div className="flex items-center gap-2">
           <Button render={<Link href="/workspaces" />} nativeButton={false} variant="ghost" size="sm">

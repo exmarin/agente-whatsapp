@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/database.types";
 import { cn } from "@/lib/utils";
@@ -9,12 +8,12 @@ import { ClientTime } from "@/shared/components/client-time";
 
 export type MessageRow = Database["public"]["Tables"]["messages"]["Row"];
 
-const STATUS_ICON: Record<string, string> = {
-  queued: "🕐",
+const STATUS_MARK: Record<string, string> = {
+  queued: "…",
   sent: "✓",
   delivered: "✓✓",
   read: "✓✓",
-  failed: "⚠️",
+  failed: "No enviado",
 };
 
 /** Caller MUST render this with `key={conversationId}` so switching
@@ -22,9 +21,12 @@ const STATUS_ICON: Record<string, string> = {
 export function MessageThread({
   conversationId,
   initialMessages,
+  senderNames,
 }: {
   conversationId: string;
   initialMessages: MessageRow[];
+  /** user id → display name for operator-authored messages */
+  senderNames: Record<string, string>;
 }) {
   const [messages, setMessages] = useState<MessageRow[]>(initialMessages);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -55,48 +57,52 @@ export function MessageThread({
 
   if (messages.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
         Sin mensajes todavía
       </div>
     );
   }
 
   return (
-    <ScrollArea className="min-h-0 flex-1 px-4 py-3">
-      <div className="flex flex-col gap-2">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={cn("flex", message.direction === "out" ? "justify-end" : "justify-start")}
-          >
+    <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
+      <div className="flex min-h-full flex-col justify-end gap-4">
+        {messages.map((message) => {
+          const out = message.direction === "out";
+          const fromAi = out && !message.sender_user_id;
+          const label = fromAi
+            ? "IA · Asistente"
+            : out
+              ? (senderNames[message.sender_user_id ?? ""] ?? "Equipo")
+              : null;
+          return (
             <div
-              className={cn(
-                "max-w-md rounded-lg px-3 py-2 text-sm",
-                message.direction === "out"
-                  ? "bg-emerald-600 text-white"
-                  : "bg-white text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100",
-              )}
+              key={message.id}
+              className={cn("flex max-w-[520px] flex-col gap-1", out ? "items-end self-end" : "items-start self-start")}
             >
-              <p className="whitespace-pre-wrap">{message.body}</p>
+              {label && (
+                <span className={cn("text-xs font-semibold", fromAi ? "text-ai-label" : "text-muted-foreground")}>
+                  {label}
+                </span>
+              )}
               <div
                 className={cn(
-                  "mt-1 flex items-center gap-1 text-[10px] opacity-70",
-                  message.direction === "out" ? "justify-end" : "justify-start",
+                  "whitespace-pre-wrap rounded-[14px] px-3.5 py-2.5 text-[15px] leading-[22px]",
+                  fromAi && "rounded-br-sm bg-ai text-ai-foreground",
+                  out && !fromAi && "rounded-br-sm bg-human text-human-foreground",
+                  !out && "rounded-bl-sm border bg-card text-card-foreground",
                 )}
               >
-                <span>
-                  <ClientTime date={message.created_at} />
-                </span>
-                {message.direction === "out" && message.status && (
-                  <span>{STATUS_ICON[message.status] ?? ""}</span>
-                )}
-                {message.direction === "out" && !message.sender_user_id && <span>· IA</span>}
+                {message.body}
               </div>
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <ClientTime date={message.created_at} short />
+                {out && message.status && <span>{STATUS_MARK[message.status] ?? ""}</span>}
+              </span>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={bottomRef} />
       </div>
-    </ScrollArea>
+    </div>
   );
 }

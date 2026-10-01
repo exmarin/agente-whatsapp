@@ -17,10 +17,14 @@ function subscribe() {
  * browser; rendering it directly causes a hydration mismatch. This is the
  * exact use case `useSyncExternalStore`'s `getServerSnapshot` is for.
  */
-export function ClientTime({ date }: { date: string | Date }) {
+export function ClientTime({ date, short = false }: { date: string | Date; short?: boolean }) {
   const formatted = useSyncExternalStore(
     subscribe,
-    () => new Date(date).toLocaleTimeString(),
+    () =>
+      new Date(date).toLocaleTimeString(
+        [],
+        short ? { hour: "2-digit", minute: "2-digit" } : undefined,
+      ),
     () => "",
   );
 
