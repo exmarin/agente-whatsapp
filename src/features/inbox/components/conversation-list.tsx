@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/database.types";
 import { cn } from "@/lib/utils";
 import { ClientTime } from "@/shared/components/client-time";
+import { initialsOf } from "../lib/initials";
 
 type ConversationState = Database["public"]["Enums"]["conversation_state"];
 
@@ -37,17 +38,6 @@ const TAG_STYLE: Record<StatusKind, { tag: string; dot: string }> = {
 };
 
 type Filter = "all" | "human" | "closed";
-
-export function initialsOf(name: string) {
-  return name
-    .replace(/[^\p{L}\p{N} ]/gu, "")
-    .split(" ")
-    .filter(Boolean)
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
 
 export function ConversationList({ initialConversations }: { initialConversations: ConversationListItem[] }) {
   const router = useRouter();

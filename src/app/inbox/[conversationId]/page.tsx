@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { AiToggle } from "@/features/inbox/components/ai-toggle";
 import { Composer } from "@/features/inbox/components/composer";
-import { initialsOf } from "@/features/inbox/components/conversation-list";
+import { initialsOf } from "@/features/inbox/lib/initials";
 import { MessageThread } from "@/features/inbox/components/message-thread";
 import { verifySession } from "@/lib/supabase/dal";
 
