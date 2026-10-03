@@ -24,6 +24,7 @@ const CSP = [
   SCRIPT_SRC,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https:",
+  "media-src 'self' https://*.supabase.co",
   "font-src 'self' data:",
   `connect-src ${CONNECT_SRC}`,
   "frame-ancestors 'none'",

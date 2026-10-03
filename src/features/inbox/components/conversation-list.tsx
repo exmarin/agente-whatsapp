@@ -10,6 +10,7 @@ import { ClientTime } from "@/shared/components/client-time";
 import { initialsOf } from "../lib/initials";
 
 type ConversationState = Database["public"]["Enums"]["conversation_state"];
+type MessageType = Database["public"]["Enums"]["message_type"];
 
 export interface ConversationListItem {
   id: string;
@@ -18,7 +19,20 @@ export interface ConversationListItem {
   last_message_at: string | null;
   unread_count: number;
   contacts: { name: string | null; phone: string } | null;
-  messages: { body: string | null }[] | null;
+  messages: { body: string | null; type: MessageType }[] | null;
+}
+
+const MEDIA_PREVIEW_LABEL: Partial<Record<MessageType, string>> = {
+  image: "📷 Imagen",
+  audio: "🎵 Audio",
+  video: "🎥 Video",
+  document: "📄 Documento",
+  sticker: "🖼️ Sticker",
+};
+
+function previewOf(message: { body: string | null; type: MessageType } | undefined): string {
+  if (!message) return "Sin mensajes";
+  return message.body || MEDIA_PREVIEW_LABEL[message.type] || "Sin mensajes";
 }
 
 type StatusKind = "ai" | "wait" | "human" | "closed";
@@ -144,7 +158,7 @@ export function ConversationList({ initialConversations }: { initialConversation
                     )}
                   </span>
                   <span className="truncate text-[13px] leading-[18px] text-muted-foreground">
-                    {conv.messages?.[0]?.body || "Sin mensajes"}
+                    {previewOf(conv.messages?.[0])}
                   </span>
                   <span className="flex items-center gap-2 pt-0.5">
                     <span className={cn("inline-flex h-[22px] items-center gap-1.5 rounded-full px-2 text-xs font-medium", style.tag)}>
