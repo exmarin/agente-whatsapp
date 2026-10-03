@@ -3,6 +3,7 @@ import { AiToggle } from "@/features/inbox/components/ai-toggle";
 import { Composer } from "@/features/inbox/components/composer";
 import { initialsOf } from "@/features/inbox/lib/initials";
 import { MessageThread } from "@/features/inbox/components/message-thread";
+import { MEDIA_BUCKET } from "@/features/messaging/services/media-storage";
 import { verifySession } from "@/lib/supabase/dal";
 
 export default async function ConversationPage({
@@ -35,6 +36,25 @@ export default async function ConversationPage({
     for (const u of senders ?? []) senderNames[u.id] = u.full_name;
   }
 
+  const mediaPaths = [
+    ...new Set(
+      (messages ?? [])
+        .map((m) => (m.media as { path?: string } | null)?.path)
+        .filter((p): p is string => !!p),
+    ),
+  ];
+  const mediaUrlByPath: Record<string, string> = {};
+  if (mediaPaths.length > 0) {
+    const { data: signed } = await supabase.storage.from(MEDIA_BUCKET).createSignedUrls(mediaPaths, 3600);
+    for (const item of signed ?? []) {
+      if (item.path && item.signedUrl) mediaUrlByPath[item.path] = item.signedUrl;
+    }
+  }
+  const messagesWithMedia = (messages ?? []).map((m) => {
+    const path = (m.media as { path?: string } | null)?.path;
+    return { ...m, mediaUrl: path ? (mediaUrlByPath[path] ?? null) : null };
+  });
+
   const contact = conversation.contacts as unknown as { name: string | null; phone: string } | null;
   const displayName = contact?.name || contact?.phone || "Desconocido";
 
@@ -53,7 +73,7 @@ export default async function ConversationPage({
       <MessageThread
         key={conversationId}
         conversationId={conversationId}
-        initialMessages={messages ?? []}
+        initialMessages={messagesWithMedia}
         senderNames={senderNames}
       />
       <Composer conversationId={conversationId} aiEnabled={conversation.ai_enabled} />

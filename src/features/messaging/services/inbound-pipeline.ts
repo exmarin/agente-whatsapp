@@ -6,8 +6,9 @@ import { getMetaIntegration, getOpenRouterIntegration } from "@/features/integra
 import { notifyTeam } from "@/features/notifications/services/notify-team";
 import { hasSchedulingIntent } from "@/features/notifications/services/scheduling-intent";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Database } from "@/lib/supabase/database.types";
+import type { Database, Json } from "@/lib/supabase/database.types";
 import type { UnifiedInboundEvent } from "../types";
+import { storeInboundMedia } from "./media-storage";
 import { sendText } from "./meta-client";
 
 type MessageType = Database["public"]["Enums"]["message_type"];
@@ -71,12 +72,31 @@ export async function handleInboundMessage(event: UnifiedInboundEvent, workspace
     .single();
   if (convError) throw convError;
 
+  let media: { path: string; mimeType: string } | null = null;
+  if (event.media) {
+    const meta = await getMetaIntegration(workspaceId);
+    if (meta) {
+      try {
+        media = await storeInboundMedia({ workspaceId, mediaId: event.media.id, accessToken: meta.accessToken });
+      } catch (error) {
+        await supabase.from("events").insert({
+          workspace_id: workspaceId,
+          conversation_id: conversation.id,
+          type: "send_error",
+          level: "error",
+          payload: { reason: "media_download_failed", message: error instanceof Error ? error.message : String(error) },
+        });
+      }
+    }
+  }
+
   const { error: inboundError } = await supabase.from("messages").insert({
     workspace_id: workspaceId,
     conversation_id: conversation.id,
     direction: "in",
     type: toMessageType(event.type),
     body: event.text ?? null,
+    media: media as unknown as Json,
     wamid: event.wamid,
     meta: { contactName: event.contactName ?? null, raw: event.raw as never },
   });
