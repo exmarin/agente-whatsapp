@@ -91,6 +91,8 @@ export function MessageThread({
               : null;
           const media = mediaOf(message);
           const isImage = media?.mimeType.startsWith("image/");
+          const isAudio = media?.mimeType.startsWith("audio/");
+          const isVideo = media?.mimeType.startsWith("video/");
           return (
             <div
               key={message.id}
@@ -110,18 +112,20 @@ export function MessageThread({
                 )}
               >
                 {media &&
-                  (isImage ? (
-                    message.mediaUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- signed URL, expires; next/image can't cache it usefully
-                      <img
-                        src={message.mediaUrl}
-                        alt={message.body ?? "Imagen"}
-                        className="max-h-80 max-w-full rounded-[10px] object-contain"
-                      />
-                    ) : (
-                      <span className="text-sm italic opacity-70">Imagen no disponible</span>
-                    )
-                  ) : message.mediaUrl ? (
+                  (!message.mediaUrl ? (
+                    <span className="text-sm italic opacity-70">Archivo no disponible</span>
+                  ) : isImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- signed URL, expires; next/image can't cache it usefully
+                    <img
+                      src={message.mediaUrl}
+                      alt={message.body ?? "Imagen"}
+                      className="max-h-80 max-w-full rounded-[10px] object-contain"
+                    />
+                  ) : isAudio ? (
+                    <audio controls preload="metadata" src={message.mediaUrl} className="h-10 max-w-full" />
+                  ) : isVideo ? (
+                    <video controls preload="metadata" src={message.mediaUrl} className="max-h-80 max-w-full rounded-[10px]" />
+                  ) : (
                     <a
                       href={message.mediaUrl}
                       target="_blank"
@@ -130,8 +134,6 @@ export function MessageThread({
                     >
                       📎 Ver archivo adjunto
                     </a>
-                  ) : (
-                    <span className="text-sm italic opacity-70">Archivo no disponible</span>
                   ))}
                 {message.body && <span>{message.body}</span>}
               </div>
